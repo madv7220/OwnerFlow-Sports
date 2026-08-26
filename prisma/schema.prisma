@@ -1,0 +1,374 @@
+// OwnerFlow Sports — data model
+// Dev datasource: SQLite (file:./dev.db). Swap the `provider`/`url` in
+// prisma.config.ts + this file to "postgresql" for production — see
+// docs/ARCHITECTURE.md for the migration path.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+enum Role {
+  BETTOR
+  HANDICAPPER
+  ADMIN
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  username       String   @unique
+  name           String
+  avatarUrl      String?
+  role           Role     @default(BETTOR)
+  bio            String?
+  walletBalance  Int      @default(0) // cents
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  handicapper    HandicapperProfile?
+  subscriptions  Subscription[]
+  purchases      Purchase[]
+  follows        Follow[]
+  feedPosts      FeedPost[]
+  feedLikes      FeedLike[]
+  feedComments   FeedComment[]
+  streamMessages StreamMessage[]
+  transactions   WalletTransaction[]
+}
+
+// ---------------------------------------------------------------------------
+// Handicappers
+// ---------------------------------------------------------------------------
+
+model HandicapperProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName     String
+  tagline         String?
+  heroImageUrl    String?
+  verified        Boolean  @default(false)
+  specialties     String   // comma-separated Sport values
+  winCount        Int      @default(0)
+  lossCount       Int      @default(0)
+  pushCount       Int      @default(0)
+  unitsNet        Float    @default(0)
+  roiPercent      Float    @default(0)
+  ratingAvg       Float    @default(0)
+  ratingCount     Int      @default(0)
+  earningsCents   Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  tiers    MembershipTier[]
+  picks    Pick[]
+  parlays  Parlay[]
+  followers Follow[]
+  streams  Stream[]
+}
+
+model Follow {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  handicapperId String
+  handicapper   HandicapperProfile @relation(fields: [handicapperId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, handicapperId])
+}
+
+// ---------------------------------------------------------------------------
+// Memberships
+// ---------------------------------------------------------------------------
+
+enum BillingInterval {
+  WEEKLY
+  MONTHLY
+  SEASON
+}
+
+model MembershipTier {
+  id            String          @id @default(cuid())
+  handicapperId String?
+  handicapper   HandicapperProfile? @relation(fields: [handicapperId], references: [id], onDelete: Cascade)
+  name          String
+  slug          String          @unique
+  priceCents    Int
+  interval      BillingInterval
+  description   String
+  perks         String          // pipe-separated list
+  accentColor   String          @default("#C9A24B")
+  isPlatform    Boolean         @default(false) // platform-wide OwnerFlow tier vs a handicapper's own tier
+  createdAt     DateTime        @default(now())
+
+  subscriptions Subscription[]
+  picks         Pick[]
+  parlays       Parlay[]
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+}
+
+model Subscription {
+  id               String             @id @default(cuid())
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tierId           String
+  tier             MembershipTier     @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  status           SubscriptionStatus @default(ACTIVE)
+  startedAt        DateTime           @default(now())
+  currentPeriodEnd DateTime
+  autoRenew        Boolean            @default(true)
+
+  @@unique([userId, tierId])
+}
+
+// ---------------------------------------------------------------------------
+// Games & odds
+// ---------------------------------------------------------------------------
+
+enum Sport {
+  NFL
+  NBA
+  MLB
+  NHL
+  NCAAF
+  NCAAB
+  SOCCER
+  MMA
+  TENNIS
+  GOLF
+}
+
+enum GameStatus {
+  SCHEDULED
+  LIVE
+  FINAL
+}
+
+model Game {
+  id         String     @id @default(cuid())
+  sport      Sport
+  league     String
+  homeTeam   String
+  awayTeam   String
+  startTime  DateTime
+  status     GameStatus @default(SCHEDULED)
+  homeScore  Int?
+  awayScore  Int?
+  spread     Float?
+  total      Float?
+  moneyHome  Int?
+  moneyAway  Int?
+  venue      String?
+
+  picks      Pick[]
+  parlayLegs ParlayLeg[]
+}
+
+// ---------------------------------------------------------------------------
+// Picks & Parlays
+// ---------------------------------------------------------------------------
+
+enum BetType {
+  SPREAD
+  MONEYLINE
+  TOTAL
+  PROP
+}
+
+enum PickStatus {
+  PENDING
+  WON
+  LOST
+  PUSH
+}
+
+model Pick {
+  id            String     @id @default(cuid())
+  handicapperId String
+  handicapper   HandicapperProfile @relation(fields: [handicapperId], references: [id], onDelete: Cascade)
+  gameId        String
+  game          Game       @relation(fields: [gameId], references: [id])
+  sport         Sport
+  betType       BetType
+  selection     String
+  odds          Int        // american odds, e.g. -110, +150
+  unitsRisked   Float      @default(1)
+  confidence    Int        @default(3) // 1-5
+  analysis      String
+  tierId        String?
+  tier          MembershipTier? @relation(fields: [tierId], references: [id])
+  priceCents    Int?       // pay-per-pick price when not gated by a tier
+  isFree        Boolean    @default(false)
+  status        PickStatus @default(PENDING)
+  publishedAt   DateTime   @default(now())
+  resultAt      DateTime?
+
+  purchases     Purchase[]
+  feedPosts     FeedPost[]
+}
+
+model Parlay {
+  id            String     @id @default(cuid())
+  handicapperId String
+  handicapper   HandicapperProfile @relation(fields: [handicapperId], references: [id], onDelete: Cascade)
+  name          String
+  legs          ParlayLeg[]
+  combinedOdds  Int
+  unitsRisked   Float      @default(1)
+  analysis      String
+  tierId        String?
+  tier          MembershipTier? @relation(fields: [tierId], references: [id])
+  priceCents    Int?
+  isFree        Boolean    @default(false)
+  status        PickStatus @default(PENDING)
+  publishedAt   DateTime   @default(now())
+  resultAt      DateTime?
+
+  purchases     Purchase[]
+}
+
+model ParlayLeg {
+  id        String  @id @default(cuid())
+  parlayId  String
+  parlay    Parlay  @relation(fields: [parlayId], references: [id], onDelete: Cascade)
+  gameId    String
+  game      Game    @relation(fields: [gameId], references: [id])
+  betType   BetType
+  selection String
+  odds      Int
+}
+
+model Purchase {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pickId     String?
+  pick       Pick?    @relation(fields: [pickId], references: [id])
+  parlayId   String?
+  parlay     Parlay?  @relation(fields: [parlayId], references: [id])
+  priceCents Int
+  purchasedAt DateTime @default(now())
+
+  @@unique([userId, pickId])
+  @@unique([userId, parlayId])
+}
+
+// ---------------------------------------------------------------------------
+// Live feed
+// ---------------------------------------------------------------------------
+
+enum FeedPostType {
+  NEWS
+  ANALYSIS
+  RESULT
+  ALERT
+}
+
+model FeedPost {
+  id          String       @id @default(cuid())
+  authorId    String
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  type        FeedPostType @default(NEWS)
+  title       String
+  body        String
+  imageUrl    String?
+  sport       Sport?
+  relatedPickId String?
+  relatedPick Pick?        @relation(fields: [relatedPickId], references: [id])
+  createdAt   DateTime     @default(now())
+
+  likes    FeedLike[]
+  comments FeedComment[]
+}
+
+model FeedLike {
+  id     String   @id @default(cuid())
+  postId String
+  post   FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+}
+
+model FeedComment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Live streaming
+// ---------------------------------------------------------------------------
+
+enum StreamStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+model Stream {
+  id            String       @id @default(cuid())
+  handicapperId String
+  handicapper   HandicapperProfile @relation(fields: [handicapperId], references: [id], onDelete: Cascade)
+  title         String
+  status        StreamStatus @default(SCHEDULED)
+  scheduledFor  DateTime?
+  startedAt     DateTime?
+  endedAt       DateTime?
+  viewerCount   Int          @default(0)
+
+  messages StreamMessage[]
+}
+
+model StreamMessage {
+  id        String   @id @default(cuid())
+  streamId  String
+  stream    Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Wallet ledger
+// ---------------------------------------------------------------------------
+
+enum TransactionType {
+  DEPOSIT
+  PICK_PURCHASE
+  PARLAY_PURCHASE
+  SUBSCRIPTION
+  PAYOUT_EARNING
+}
+
+model WalletTransaction {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        TransactionType
+  amountCents Int             // negative = debit, positive = credit
+  description String
+  createdAt   DateTime        @default(now())
+}
