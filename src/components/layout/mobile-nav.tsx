@@ -20,7 +20,7 @@ export function MobileNav({ isAuthed }: { isAuthed: boolean }) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="md:hidden">
+        <Button variant="ghost" size="icon" className="lg:hidden">
           <Menu />
           <span className="sr-only">Open menu</span>
         </Button>

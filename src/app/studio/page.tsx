@@ -82,20 +82,22 @@ export default async function StudioPage() {
               </Card>
             )}
             {picks.map((p) => (
-              <Card key={p.id}>
-                <CardContent className="flex items-center justify-between gap-3 p-4">
-                  <div className="flex items-center gap-3">
-                    <SportBadge sport={p.sport} />
-                    <div>
-                      <div className="text-sm font-medium">{p.selection}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {p.game.awayTeam} @ {p.game.homeTeam} · {timeAgo(p.publishedAt)}
+              <Link key={p.id} href={`/picks/${p.id}`}>
+                <Card className="transition-colors hover:border-gold/40">
+                  <CardContent className="flex items-center justify-between gap-3 p-4">
+                    <div className="flex items-center gap-3">
+                      <SportBadge sport={p.sport} />
+                      <div>
+                        <div className="text-sm font-medium">{p.selection}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {p.game.awayTeam} @ {p.game.homeTeam} · {timeAgo(p.publishedAt)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <StatusBadge status={p.status} />
-                </CardContent>
-              </Card>
+                    <StatusBadge status={p.status} />
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>

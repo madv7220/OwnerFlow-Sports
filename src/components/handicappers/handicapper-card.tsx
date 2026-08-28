@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { SPORT_LABELS } from "@/components/shared/sport-badge";
-import { formatCents } from "@/lib/utils";
+import { cn, formatCents } from "@/lib/utils";
 
 export type HandicapperCardData = {
   id: string;
@@ -16,6 +16,7 @@ export type HandicapperCardData = {
   winCount: number;
   lossCount: number;
   roiPercent: number;
+  unitsNet: number;
   ratingAvg: number;
   ratingCount: number;
   followerCount: number;
@@ -59,10 +60,24 @@ export function HandicapperCard({ h }: { h: HandicapperCardData }) {
 
           <div className="mt-auto grid grid-cols-3 gap-2 border-t border-border/70 pt-3 text-center">
             <div>
-              <div className="font-mono-num text-sm font-semibold text-emerald-bright">
-                {winPct.toFixed(0)}%
+              <div className="font-mono-num text-sm font-semibold text-foreground">
+                {h.winCount}-{h.lossCount}
               </div>
-              <div className="text-[10px] text-muted-foreground uppercase">Win rate</div>
+              <div className="text-[10px] text-muted-foreground uppercase">
+                Record · {winPct.toFixed(0)}%
+              </div>
+            </div>
+            <div>
+              <div
+                className={cn(
+                  "font-mono-num text-sm font-semibold",
+                  h.unitsNet >= 0 ? "text-emerald-bright" : "text-red-300",
+                )}
+              >
+                {h.unitsNet > 0 ? "+" : ""}
+                {h.unitsNet.toFixed(1)}u
+              </div>
+              <div className="text-[10px] text-muted-foreground uppercase">Units</div>
             </div>
             <div>
               <div className="font-mono-num flex items-center justify-center gap-0.5 text-sm font-semibold">
@@ -72,23 +87,24 @@ export function HandicapperCard({ h }: { h: HandicapperCardData }) {
               </div>
               <div className="text-[10px] text-muted-foreground uppercase">ROI</div>
             </div>
-            <div>
-              <div className="font-mono-num flex items-center justify-center gap-0.5 text-sm font-semibold">
-                <Users className="size-3 text-gold" />
-                {h.followerCount}
-              </div>
-              <div className="text-[10px] text-muted-foreground uppercase">Followers</div>
-            </div>
           </div>
 
-          {h.cheapestTierCents !== null && (
-            <div className="text-xs text-muted-foreground">
-              Membership from{" "}
-              <span className="font-semibold text-gold-bright">
-                {formatCents(h.cheapestTierCents)}/mo
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            {h.cheapestTierCents !== null ? (
+              <span>
+                From{" "}
+                <span className="font-semibold text-gold-bright">
+                  {formatCents(h.cheapestTierCents)}/mo
+                </span>
               </span>
-            </div>
-          )}
+            ) : (
+              <span />
+            )}
+            <span className="flex items-center gap-1">
+              <Users className="size-3" />
+              {h.followerCount}
+            </span>
+          </div>
         </CardContent>
       </Card>
     </Link>

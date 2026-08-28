@@ -17,6 +17,11 @@ UI states, no placeholder buttons. Specifically:
   (with legs), purchases, follows, live feed posts/likes/comments, live
   streams/chat, and a wallet ledger. SQLite in dev, swaps to Postgres by
   changing one datasource line (see §3).
+- **Grading engine** (`src/lib/grading.ts`): settles picks and parlays against
+  final scores and derives every handicapper's public record from that graded
+  history. Exposed as `POST /api/admin/grade` for an admin or a cron job.
+- **Research board** (`/scores`): every game with its spread/total/moneyline,
+  live scores, and the number of handicapper picks riding on it.
 - **Marketplace economics**: every pick/parlay purchase and every subscription
   runs through a real `$transaction` — debits the buyer's wallet, credits the
   handicapper's earnings (80/20 split, see `PLATFORM_TAKE_RATE` in
@@ -113,15 +118,26 @@ touches this server.
 2. Add a scheduled job (Vercel Cron, or a small worker) that runs every few
    minutes: upsert `Game` rows by an external ID, update `spread` / `total` /
    `moneyHome` / `moneyAway` / `status` / scores.
-3. Because `Pick.gameId` and `ParlayLeg.gameId` are foreign keys to `Game`,
-   grading becomes mechanical: when a `Game.status` flips to `FINAL`, a job
-   evaluates each attached `Pick`/`Parlay` against the final score and the
-   line at publish time, sets `status` to `WON`/`LOST`/`PUSH`, and rolls the
-   result into `HandicapperProfile.winCount` / `lossCount` / `unitsNet` /
-   `roiPercent`. That aggregation logic doesn't exist yet — it's the one
-   piece of "business logic" left to write once a real data feed exists,
-   since the seed script currently assigns results randomly for demo
-   purposes.
+3. Grading is already built and does not need to change — only the score feed
+   does. `src/lib/grading.ts` parses each pick's `selection` against the
+   final score, settles it `WON`/`LOST`/`PUSH`, computes unit P/L at American
+   odds, and rebuilds `HandicapperProfile.winCount` / `lossCount` /
+   `pushCount` / `unitsNet` / `roiPercent` from the settled history. Because
+   `Pick.gameId` and `ParlayLeg.gameId` are foreign keys to `Game`, flipping a
+   game to `FINAL` with scores is all that's required to trigger it.
+4. Point the scheduled job at `POST /api/admin/grade` after each odds sync. It
+   authenticates with the `GRADING_CRON_SECRET` header (or an `ADMIN`
+   session), is idempotent — re-running grades nothing twice — and reports
+   how many picks and parlays it settled.
+
+**On record integrity:** no code path anywhere writes a handicapper's
+win/loss/units/ROI by hand. `recomputeHandicapperRecord()` is the sole writer,
+and it derives every figure from graded wagers. Even the seed data works this
+way: it generates real picks against real final scores and then runs the
+grading engine, so the numbers on a profile are reproducible from the pick
+table rather than invented. Prop bets carry no machine-readable line, so
+`gradePick` returns `null` for them and leaves them pending for manual
+settlement — that's the one queue you'd want an admin UI for.
 
 ### 4.3 Live video streaming
 

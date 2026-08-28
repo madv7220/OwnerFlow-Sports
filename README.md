@@ -31,9 +31,29 @@ Every seeded account has the password `password123`.
 |---|---|---|
 | Member | `demo@ownerflow.demo` | Has an active subscription, purchases, and follows already seeded. |
 | Handicapper | `vegas_marcus@ownerflow.demo` | Has published picks, parlays, tiers, and a live stream — visit `/studio`. |
+| Admin | `admin@ownerflow.demo` | Can trigger grading via `POST /api/admin/grade`. |
 
 New signups (`/register`) get $500 in demo wallet credit automatically so
 every purchase/subscribe flow works immediately without a payment provider.
+
+## How records work
+
+Handicapper win/loss/units/ROI are never set by hand. When a game finishes,
+the grading engine (`src/lib/grading.ts`) settles every pick and parlay
+attached to it and recomputes the handicapper's record from that graded
+history. The seed data is built the same way — real picks against real final
+scores, then graded — so every number on a profile traces back to the pick
+table.
+
+To see it run, finish a game and grade it:
+
+```bash
+# as the seeded admin, or with the GRADING_CRON_SECRET header
+curl -X POST http://localhost:3000/api/admin/grade
+```
+
+In production this runs on a schedule right after the odds/scores sync — see
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §4.2.
 
 ## Scripts
 
