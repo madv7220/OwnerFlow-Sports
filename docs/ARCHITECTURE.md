@@ -1,8 +1,8 @@
 # OwnerFlow Sports — Architecture & Production Roadmap
 
-This document describes what is built in this repository today, and exactly what
-changes to make it production-ready: real payments, real odds data, real video
-streaming, and infrastructure that scales past a single SQLite file.
+This document describes what is built in this repository today: the data model,
+the grading engine, the Stripe / odds-feed / LiveKit integrations, and what
+remains to run it at scale past a single SQLite file.
 
 ## 1. What's implemented right now
 
@@ -24,22 +24,22 @@ UI states, no placeholder buttons. Specifically:
   live scores, and the number of handicapper picks riding on it.
 - **Marketplace economics**: every pick/parlay purchase and every subscription
   runs through a real `$transaction` — debits the buyer's wallet, credits the
-  handicapper's earnings (80/20 split, see `PLATFORM_TAKE_RATE` in
-  `src/app/api/purchases/route.ts` and `src/app/api/subscriptions/route.ts`),
-  and writes an auditable `WalletTransaction` row. This is the same shape
-  Stripe Connect destination charges will drop into (§4.1).
+  handicapper's earnings (80/20 split), and writes an auditable
+  `WalletTransaction` row. With Stripe configured, wallets are funded by card
+  and subscriptions bill through Stripe Connect (§4.1).
 - **Handicapper Studio** (`/studio`): create picks, build multi-leg parlays,
   create membership tiers, schedule and go live on streams — all real writes
   against the database, gated to the authenticated handicapper's own profile.
 - **Live feed**: real posts, likes, and comments (`/feed`), polling-based.
-- **Live streaming**: real DB-backed live/scheduled/ended state, a
-  broadcaster-side camera preview (via `getUserMedia`, local only), and a
-  polling-based live chat. **Multi-viewer video distribution is not wired up**
-  — see §4.3 for the exact integration point.
-- **Demo wallet**: every account gets demo credit and can "deposit" more
-  instantly from `/account/wallet`. This exists so every purchase/subscribe
-  button is fully functional without requiring payment provider API keys in
-  this environment. §4.1 replaces it with real money.
+- **Live streaming**: real DB-backed live/scheduled/ended state and a
+  polling-based live chat. With LiveKit configured the broadcaster publishes
+  camera and mic to signed-in viewers (§4.3); without it they get a local
+  camera preview.
+- **Integrations**: Stripe (payments, subscriptions, Connect payouts), The Odds
+  API (live games, lines, scores), and LiveKit (video) are all implemented and
+  activated by environment variables — see §4. Each degrades gracefully, so
+  with no credentials the app still runs end to end on a demo wallet, seeded
+  games, and a local preview.
 
 ## 2. Tech stack
 
@@ -75,60 +75,67 @@ UI states, no placeholder buttons. Specifically:
    running serverless functions — Prisma's connection count adds up fast
    under concurrent invocations.
 
-## 4. Integration points for production
+## 4. Third-party integrations
 
-Each of these is a real feature in the app today, running against demo/local
-implementations. The replacement is additive — swap the implementation behind
-the same UI and API surface, nothing in the frontend needs to change.
+Stripe, The Odds API, and LiveKit are **implemented**. Each is activated by
+environment variables and degrades gracefully when they're absent — with no
+credentials the app runs on its demo wallet, seeded games, and a local camera
+preview, so the repository is still fully runnable by anyone. `npm run
+check:integrations` validates whatever is configured against the live provider.
 
-### 4.1 Payments — Stripe
+### 4.1 Payments — Stripe (implemented)
 
-Replace the wallet-only flow with real money in three additions:
+Enabled by `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`.
 
-1. **Funding the wallet**: replace `POST /api/wallet/deposit`
-   (`src/app/api/wallet/deposit/route.ts`) with a route that creates a Stripe
-   Checkout Session (`mode: "payment"`) for the chosen amount, and a
-   `POST /api/webhooks/stripe` handler that verifies the
-   `checkout.session.completed` event and *then* credits the wallet — never
-   credit on the client-side redirect alone.
-2. **Handicapper payouts — Stripe Connect**: onboard handicappers with
-   [Connect Express accounts](https://stripe.com/docs/connect/express-accounts)
-   during studio signup. The 80/20 split already computed in
-   `src/app/api/purchases/route.ts` and `src/app/api/subscriptions/route.ts`
-   maps directly onto `application_fee_amount` on a destination charge, or a
-   scheduled Transfer if you keep the current wallet-ledger model and settle
-   in batches.
-3. **Recurring billing**: `Subscription.currentPeriodEnd` is already modeled
-   for renewal. Swap the demo instant-charge in `/api/subscriptions` for a
-   Stripe Subscription + `price` per tier, and let Stripe's webhook
-   (`invoice.paid` / `customer.subscription.deleted`) update `Subscription.status`
-   instead of the app computing period ends itself.
+**Money in.** `POST /api/stripe/wallet-checkout` opens a Checkout Session to
+fund a member's wallet, and `POST /api/stripe/subscribe` opens a
+`mode: "subscription"` session for a membership tier. Stripe Products/Prices
+are created lazily per tier and cached on `MembershipTier.stripePriceId`.
 
-PCI scope stays minimal: Stripe Elements/Checkout means card data never
-touches this server.
+**Money out.** Handicappers onboard through Stripe Connect (Express) at
+`/studio/payouts`. A subscription to an onboarded handicapper is billed on
+their account via `transfer_data.destination` with
+`application_fee_percent = PLATFORM_FEE_PERCENT`, so their share settles
+automatically. Pick sales run through the wallet ledger and are withdrawn on
+demand by `POST /api/stripe/payout`, which reserves the balance in a
+transaction *before* calling Stripe and passes an idempotency key, so a
+double-click can't pay the same balance twice; a failed transfer returns the
+reservation.
 
-### 4.2 Live odds & scores — a sports data API
+**Trust boundary.** `POST /api/stripe/webhook` is the only thing that grants
+paid access. It verifies the signature against the raw request body and
+records every `event.id` in `ProcessedWebhookEvent` before acting, so Stripe's
+at-least-once delivery can't double-credit a wallet. If a handler throws, the
+dedupe row is released so Stripe's retry can succeed. The browser redirect
+after Checkout is never trusted — a user can navigate to the success URL
+without paying.
 
-`Game` rows are currently seeded once (`prisma/seed.ts`). In production:
+PCI scope stays minimal: Checkout means card data never touches this server.
 
-1. Pick a provider: [The Odds API](https://the-odds-api.com/),
-   [SportsDataIO](https://sportsdata.io/), or
-   [Sportradar](https://sportradar.com/) depending on sport coverage and
-   budget.
-2. Add a scheduled job (Vercel Cron, or a small worker) that runs every few
-   minutes: upsert `Game` rows by an external ID, update `spread` / `total` /
-   `moneyHome` / `moneyAway` / `status` / scores.
-3. Grading is already built and does not need to change — only the score feed
-   does. `src/lib/grading.ts` parses each pick's `selection` against the
-   final score, settles it `WON`/`LOST`/`PUSH`, computes unit P/L at American
-   odds, and rebuilds `HandicapperProfile.winCount` / `lossCount` /
-   `pushCount` / `unitsNet` / `roiPercent` from the settled history. Because
-   `Pick.gameId` and `ParlayLeg.gameId` are foreign keys to `Game`, flipping a
-   game to `FINAL` with scores is all that's required to trigger it.
-4. Point the scheduled job at `POST /api/admin/grade` after each odds sync. It
-   authenticates with the `GRADING_CRON_SECRET` header (or an `ADMIN`
-   session), is idempotent — re-running grades nothing twice — and reports
-   how many picks and parlays it settled.
+### 4.2 Live odds & scores — The Odds API (implemented)
+
+Enabled by `ODDS_API_KEY`, scoped by `ODDS_API_SPORTS`.
+
+`src/lib/odds.ts` pulls `/v4/sports/{key}/odds` for the board (spreads,
+totals, moneylines) and `/v4/sports/{key}/scores` for live and final scores,
+mapping our `Sport` enum onto the provider's sport keys. Rows are upserted on
+`Game.externalId` — the provider's stable event id — so repeated syncs update
+rather than duplicate, and a finished game is never regressed to scheduled by
+an odds refresh.
+
+`POST /api/admin/sync-odds` runs the whole cycle: refresh odds, refresh
+scores, then grade. One sport failing (an out-of-season key, a quota trip)
+is collected into the response's `errors` rather than aborting the rest.
+Schedule it every few minutes on game days.
+
+Grading needs no provider-specific code: `src/lib/grading.ts` parses each
+pick's `selection` against the final score, settles it `WON`/`LOST`/`PUSH`,
+computes unit P/L at American odds, and rebuilds the handicapper's record from
+the settled history. Because `Pick.gameId` and `ParlayLeg.gameId` are foreign
+keys to `Game`, flipping a game to `FINAL` with scores is all that's required
+to trigger it. `POST /api/admin/grade` runs grading alone if you'd rather
+schedule the two separately; both accept the `GRADING_CRON_SECRET` header or
+an `ADMIN` session and are idempotent.
 
 **On record integrity:** no code path anywhere writes a handicapper's
 win/loss/units/ROI by hand. `recomputeHandicapperRecord()` is the sole writer,
@@ -139,25 +146,20 @@ table rather than invented. Prop bets carry no machine-readable line, so
 `gradePick` returns `null` for them and leaves them pending for manual
 settlement — that's the one queue you'd want an admin UI for.
 
-### 4.3 Live video streaming
+### 4.3 Live video streaming — LiveKit (implemented)
 
-Today `/live/[id]` gives the broadcaster a real local camera preview and
-everyone a real, DB-backed live/chat experience — but there's no server
-relaying video between them yet. To make streams actually watchable:
+Enabled by `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `NEXT_PUBLIC_LIVEKIT_URL`.
 
-1. Use [LiveKit](https://livekit.io/) (self-hostable) or
-   [Mux Real-Time Video](https://mux.com/real-time-video) — both have React
-   SDKs.
-2. `POST /api/streams/[id]/go-live` (`src/app/api/streams/[id]/go-live/route.ts`)
-   is the exact place to mint a room + broadcaster token and return it to the
-   client instead of (or alongside) the `getUserMedia` preview in
-   `src/components/live/broadcast-controls.tsx`.
-3. `src/components/live/viewer-stage.tsx` is the exact place to mount the
-   provider's `<VideoTrack>` /player component once a viewer token is issued
-   from the same route family.
-4. Keep the existing polling chat, or upgrade it to the provider's built-in
-   data channel — the `StreamMessage` table stays as the durable record
-   either way.
+`POST /api/streams/[id]/token` mints a room token scoped to
+`ownerflow-stream-{id}`. **Publishing rights are granted only to the
+handicapper who owns the stream**; everyone else joins subscribe-only, so a
+viewer cannot push their own camera into someone's broadcast. Viewers must be
+signed in to be issued a token at all.
+
+`src/components/live/livekit-stage.tsx` renders the room for both sides;
+`broadcast-controls.tsx` swaps its local `getUserMedia` preview for a
+publishing room once the stream goes live. Chat continues to run through the
+`StreamMessage` table, which stays the durable record regardless of transport.
 
 ### 4.4 Search & recommendations at scale
 

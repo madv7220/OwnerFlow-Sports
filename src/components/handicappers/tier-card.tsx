@@ -20,6 +20,7 @@ export function TierCard({
   accentColor,
   isSubscribed,
   featured,
+  stripeEnabled = false,
 }: {
   id: string;
   name: string;
@@ -30,6 +31,7 @@ export function TierCard({
   accentColor: string;
   isSubscribed: boolean;
   featured?: boolean;
+  stripeEnabled?: boolean;
 }) {
   const { status } = useSession();
   const router = useRouter();
@@ -41,17 +43,29 @@ export function TierCard({
       return;
     }
     setLoading(true);
-    const res = await fetch("/api/subscriptions", {
+
+    // With Stripe configured this is real recurring billing via Checkout;
+    // otherwise it settles against the demo wallet.
+    const endpoint = stripeEnabled ? "/api/stripe/subscribe" : "/api/subscriptions";
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tierId: id }),
     });
     const data = await res.json().catch(() => ({}));
-    setLoading(false);
+
     if (!res.ok) {
+      setLoading(false);
       toast.error(data.error ?? "Could not subscribe");
       return;
     }
+
+    if (stripeEnabled && data.url) {
+      window.location.assign(data.url);
+      return;
+    }
+
+    setLoading(false);
     toast.success(`Subscribed to ${name}. New balance: ${formatCents(data.walletBalance)}`);
     router.refresh();
   }

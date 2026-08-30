@@ -11,6 +11,7 @@ import { SPORT_LABELS } from "@/components/shared/sport-badge";
 import { PickCard, type PickCardData } from "@/components/picks/pick-card";
 import { ParlayCard, type ParlayCardData } from "@/components/picks/parlay-card";
 import { TierCard } from "@/components/handicappers/tier-card";
+import { isStripeEnabled } from "@/lib/stripe";
 import { FollowButton } from "@/components/handicappers/follow-button";
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
@@ -102,6 +103,8 @@ export default async function HandicapperProfilePage({
     handicapper: { id: profile.id, displayName: profile.displayName, username: profile.user.username },
   }));
 
+  const stripeEnabled = isStripeEnabled();
+
   return (
     <div>
       <div className="relative overflow-hidden border-b border-border/70 bg-gradient-to-b from-surface to-background">
@@ -180,6 +183,7 @@ export default async function HandicapperProfilePage({
                 accentColor={t.accentColor}
                 isSubscribed={access.subscribedTierIds.has(t.id)}
                 featured={i === 1}
+                stripeEnabled={stripeEnabled}
               />
             ))}
           </div>

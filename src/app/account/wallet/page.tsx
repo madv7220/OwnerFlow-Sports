@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DepositButtons } from "@/components/account/deposit-buttons";
+import { isStripeEnabled } from "@/lib/stripe";
 import { cn, formatCents, timeAgo } from "@/lib/utils";
 
 export const metadata = { title: "Wallet — OwnerFlow Sports" };
@@ -24,6 +25,8 @@ export default async function WalletPage() {
 
   if (!user) redirect("/login");
 
+  const stripeEnabled = isStripeEnabled();
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
       <h1 className="font-display text-3xl mb-8">Wallet</h1>
@@ -35,7 +38,7 @@ export default async function WalletPage() {
             {formatCents(user.walletBalance)}
           </span>
           <Badge variant="secondary" className="mt-1">
-            Demo credit — no real payment processed
+            {stripeEnabled ? "Funded by card via Stripe" : "Demo credit — no real payment processed"}
           </Badge>
         </CardContent>
       </Card>
@@ -45,10 +48,11 @@ export default async function WalletPage() {
           <CardTitle className="text-base">Add funds</CardTitle>
         </CardHeader>
         <CardContent>
-          <DepositButtons />
+          <DepositButtons stripeEnabled={stripeEnabled} />
           <p className="mt-3 text-xs text-muted-foreground">
-            In production this connects to Stripe Checkout for real card payments — see the
-            architecture doc for the integration plan.
+            {stripeEnabled
+              ? "Card payments are processed by Stripe Checkout. Your balance is credited once Stripe confirms the charge."
+              : "Demo top-up. Set STRIPE_SECRET_KEY to take real card payments through Stripe Checkout."}
           </p>
         </CardContent>
       </Card>

@@ -25,6 +25,7 @@ enum Role {
 model User {
   id             String   @id @default(cuid())
   email          String   @unique
+  stripeCustomerId String? @unique
   passwordHash   String
   username       String   @unique
   name           String
@@ -67,6 +68,10 @@ model HandicapperProfile {
   ratingAvg       Float    @default(0)
   ratingCount     Int      @default(0)
   earningsCents   Int      @default(0)
+  paidOutCents    Int      @default(0)
+  // Stripe Connect: where this handicapper's share of every sale is sent.
+  stripeAccountId String?  @unique
+  payoutsEnabled  Boolean  @default(false)
   createdAt       DateTime @default(now())
 
   tiers    MembershipTier[]
@@ -74,6 +79,24 @@ model HandicapperProfile {
   parlays  Parlay[]
   followers Follow[]
   streams  Stream[]
+  payouts  Payout[]
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model Payout {
+  id               String       @id @default(cuid())
+  handicapperId    String
+  handicapper      HandicapperProfile @relation(fields: [handicapperId], references: [id], onDelete: Cascade)
+  amountCents      Int
+  status           PayoutStatus @default(PENDING)
+  stripeTransferId String?      @unique
+  failureReason    String?
+  createdAt        DateTime     @default(now())
 }
 
 model Follow {
@@ -109,6 +132,8 @@ model MembershipTier {
   perks         String          // pipe-separated list
   accentColor   String          @default("#C9A24B")
   isPlatform    Boolean         @default(false) // platform-wide OwnerFlow tier vs a handicapper's own tier
+  stripeProductId String?
+  stripePriceId   String?
   createdAt     DateTime        @default(now())
 
   subscriptions Subscription[]
@@ -124,6 +149,7 @@ enum SubscriptionStatus {
 
 model Subscription {
   id               String             @id @default(cuid())
+  stripeSubscriptionId String?        @unique
   userId           String
   user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   tierId           String
@@ -161,6 +187,8 @@ enum GameStatus {
 
 model Game {
   id         String     @id @default(cuid())
+  // Stable id from the odds/scores provider, so syncs upsert instead of duplicate.
+  externalId String?    @unique
   sport      Sport
   league     String
   homeTeam   String
@@ -349,6 +377,18 @@ model StreamMessage {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   body      String
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks
+// ---------------------------------------------------------------------------
+
+/// Stripe delivers events at least once. Recording each processed event id
+/// keeps replays from double-crediting a wallet or double-granting access.
+model ProcessedWebhookEvent {
+  id          String   @id // the provider's event id
+  type        String
+  processedAt DateTime @default(now())
 }
 
 // ---------------------------------------------------------------------------
