@@ -64,7 +64,12 @@ export function PickCard({ pick, unlocked }: { pick: PickCardData; unlocked: boo
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <div className="font-display text-lg leading-snug">{pick.selection}</div>
+          <Link
+            href={`/picks/${pick.id}`}
+            className="font-display text-lg leading-snug transition-colors hover:text-gold-bright"
+          >
+            {pick.selection}
+          </Link>
           <OddsPill odds={pick.odds} />
         </div>
 

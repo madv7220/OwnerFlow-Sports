@@ -6,10 +6,12 @@ export function ViewerStage({
   displayName,
   status,
   viewerCount,
+  needsSignIn = false,
 }: {
   displayName: string;
   status: string;
   viewerCount: number;
+  needsSignIn?: boolean;
 }) {
   const initials = displayName
     .split(" ")
@@ -51,11 +53,13 @@ export function ViewerStage({
       )}
 
       <p className="mt-4 max-w-sm text-center text-sm text-muted-foreground">
-        {status === "LIVE"
-          ? `${displayName} is live in the analysis room. Follow along in chat.`
-          : status === "SCHEDULED"
-            ? `${displayName} hasn't started this stream yet.`
-            : "This stream has ended."}
+        {needsSignIn
+          ? `${displayName} is live. Sign in to watch the broadcast and join the chat.`
+          : status === "LIVE"
+            ? `${displayName} is live in the analysis room. Follow along in chat.`
+            : status === "SCHEDULED"
+              ? `${displayName} hasn't started this stream yet.`
+              : "This stream has ended."}
       </p>
     </div>
   );

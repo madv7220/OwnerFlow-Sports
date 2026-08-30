@@ -5,6 +5,7 @@ const columns = [
   {
     title: "Platform",
     links: [
+      { href: "/scores", label: "Scores & Odds" },
       { href: "/feed", label: "Live Feed" },
       { href: "/picks", label: "Picks & Parlays" },
       { href: "/handicappers", label: "Handicappers" },

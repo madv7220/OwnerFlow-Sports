@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { BadgeCheck, Radio, Star, TrendingUp, Trophy } from "lucide-react";
+import { BadgeCheck, Coins, Radio, Star, TrendingUp, Trophy } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAccessContext, hasAccess } from "@/lib/access";
@@ -11,6 +11,7 @@ import { SPORT_LABELS } from "@/components/shared/sport-badge";
 import { PickCard, type PickCardData } from "@/components/picks/pick-card";
 import { ParlayCard, type ParlayCardData } from "@/components/picks/parlay-card";
 import { TierCard } from "@/components/handicappers/tier-card";
+import { isStripeEnabled } from "@/lib/stripe";
 import { FollowButton } from "@/components/handicappers/follow-button";
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
@@ -102,6 +103,8 @@ export default async function HandicapperProfilePage({
     handicapper: { id: profile.id, displayName: profile.displayName, username: profile.user.username },
   }));
 
+  const stripeEnabled = isStripeEnabled();
+
   return (
     <div>
       <div className="relative overflow-hidden border-b border-border/70 bg-gradient-to-b from-surface to-background">
@@ -146,12 +149,21 @@ export default async function HandicapperProfilePage({
             <FollowButton handicapperId={profile.id} initiallyFollowing={isFollowing} />
           </div>
 
-          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             <StatTile icon={<Trophy className="size-4 text-gold" />} label="Record" value={`${wins}-${losses}-${profile.pushCount}`} />
             <StatTile icon={<TrendingUp className="size-4 text-emerald-bright" />} label="Win Rate" value={`${winPct.toFixed(1)}%`} />
+            <StatTile
+              icon={<Coins className="size-4 text-emerald-bright" />}
+              label="Units Net"
+              value={`${profile.unitsNet > 0 ? "+" : ""}${profile.unitsNet.toFixed(1)}u`}
+            />
             <StatTile icon={<TrendingUp className="size-4 text-gold" />} label="ROI" value={`${profile.roiPercent > 0 ? "+" : ""}${profile.roiPercent.toFixed(1)}%`} />
             <StatTile icon={<Star className="size-4 text-gold" />} label="Rating" value={`${profile.ratingAvg.toFixed(1)} (${profile.ratingCount})`} />
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Record derived from {wins + losses + profile.pushCount} graded wagers — updated
+            automatically when games finish.
+          </p>
         </div>
       </div>
 
@@ -171,6 +183,7 @@ export default async function HandicapperProfilePage({
                 accentColor={t.accentColor}
                 isSubscribed={access.subscribedTierIds.has(t.id)}
                 featured={i === 1}
+                stripeEnabled={stripeEnabled}
               />
             ))}
           </div>

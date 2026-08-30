@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAccessContext } from "@/lib/access";
 import { TierCard } from "@/components/handicappers/tier-card";
+import { isStripeEnabled } from "@/lib/stripe";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -18,6 +19,8 @@ export default async function PricingPage() {
     getAccessContext(session?.user?.id),
     prisma.handicapperProfile.count(),
   ]);
+
+  const stripeEnabled = isStripeEnabled();
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
@@ -43,6 +46,7 @@ export default async function PricingPage() {
             accentColor={t.accentColor}
             isSubscribed={access.subscribedTierIds.has(t.id)}
             featured={i === 1}
+            stripeEnabled={stripeEnabled}
           />
         ))}
       </div>

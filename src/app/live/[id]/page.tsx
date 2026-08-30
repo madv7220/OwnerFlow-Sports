@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { BroadcastControls } from "@/components/live/broadcast-controls";
 import { ViewerStage } from "@/components/live/viewer-stage";
+import { LiveKitStage } from "@/components/live/livekit-stage";
+import { isLiveKitEnabled } from "@/lib/livekit";
 import { StreamChat } from "@/components/live/stream-chat";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -33,6 +35,7 @@ export default async function StreamPage({ params }: { params: Promise<{ id: str
   if (!stream) notFound();
 
   const isOwner = session?.user?.id === stream.handicapper.userId;
+  const liveKitEnabled = isLiveKitEnabled();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -57,12 +60,26 @@ export default async function StreamPage({ params }: { params: Promise<{ id: str
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         <div className="flex flex-col gap-4">
           {isOwner ? (
-            <BroadcastControls streamId={stream.id} status={stream.status} />
+            <BroadcastControls
+              streamId={stream.id}
+              status={stream.status}
+              liveKitEnabled={liveKitEnabled}
+              viewerCount={stream.viewerCount}
+            />
+          ) : liveKitEnabled && stream.status === "LIVE" && session?.user ? (
+            <LiveKitStage
+              streamId={stream.id}
+              canPublishHint={false}
+              viewerCount={stream.viewerCount}
+              isLive
+              emptyLabel={`${stream.handicapper.displayName} hasn't started their camera yet.`}
+            />
           ) : (
             <ViewerStage
               displayName={stream.handicapper.displayName}
               status={stream.status}
               viewerCount={stream.viewerCount}
+              needsSignIn={liveKitEnabled && stream.status === "LIVE" && !session?.user}
             />
           )}
         </div>

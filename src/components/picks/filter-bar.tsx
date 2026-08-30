@@ -15,10 +15,12 @@ export function PicksFilterBar({
   sport,
   type,
   sort,
+  availableSports,
 }: {
   sport: string;
   type: string;
   sort: string;
+  availableSports: string[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -47,11 +49,13 @@ export function PicksFilterBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All sports</SelectItem>
-            {Object.entries(SPORT_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
+            {Object.entries(SPORT_LABELS)
+              .filter(([value]) => availableSports.includes(value))
+              .map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
 

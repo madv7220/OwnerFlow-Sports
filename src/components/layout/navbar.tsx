@@ -29,7 +29,7 @@ export async function Navbar() {
         <MobileNav isAuthed={!!session} />
         <Logo />
 
-        <nav className="ml-4 hidden items-center gap-1 md:flex">
+        <nav className="ml-2 hidden items-center gap-0.5 lg:flex">
           {NAV_LINKS.map((link) => (
             <Button key={link.href} asChild variant="ghost" size="sm" className="gap-1.5 font-medium">
               <Link href={link.href}>

@@ -19,8 +19,9 @@ export default async function PicksPage({
   const sort = params.sort ?? "newest";
 
   const session = await auth();
-  const [access, pickRows, parlayRows] = await Promise.all([
+  const [access, sportsWithPicks, pickRows, parlayRows] = await Promise.all([
     getAccessContext(session?.user?.id),
+    prisma.pick.groupBy({ by: ["sport"] }),
     type === "picks"
       ? prisma.pick.findMany({
           where: sport !== "all" ? { sport: sport as Sport } : undefined,
@@ -101,7 +102,12 @@ export default async function PicksPage({
       </div>
 
       <div className="mb-6">
-        <PicksFilterBar sport={sport} type={type} sort={sort} />
+        <PicksFilterBar
+          sport={sport}
+          type={type}
+          sort={sort}
+          availableSports={sportsWithPicks.map((s) => s.sport as string)}
+        />
       </div>
 
       {type === "picks" ? (

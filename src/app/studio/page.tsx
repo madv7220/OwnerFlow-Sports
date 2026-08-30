@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DollarSign, Plus, Radio, Target, TrendingUp, Users } from "lucide-react";
+import { BanknoteArrowUp, DollarSign, Plus, Radio, Target, TrendingUp, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireHandicapperProfile } from "@/lib/studio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,11 @@ export default async function StudioPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" variant="outline" className="gap-1.5">
+            <Link href="/studio/payouts">
+              <BanknoteArrowUp className="size-3.5" /> Payouts
+            </Link>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="gap-1.5">
             <Link href="/studio/streams/new">
               <Radio className="size-3.5" /> Schedule stream
             </Link>
@@ -57,7 +62,9 @@ export default async function StudioPage() {
       </div>
 
       <div className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard icon={<DollarSign className="size-4 text-gold" />} label="Total earnings" value={formatCents(profile.earningsCents)} />
+        <Link href="/studio/payouts">
+          <StatCard icon={<DollarSign className="size-4 text-gold" />} label="Total earnings" value={formatCents(profile.earningsCents)} />
+        </Link>
         <StatCard icon={<Target className="size-4 text-gold" />} label="Win rate" value={`${winPct.toFixed(1)}%`} />
         <StatCard icon={<TrendingUp className="size-4 text-gold" />} label="ROI" value={`${profile.roiPercent > 0 ? "+" : ""}${profile.roiPercent.toFixed(1)}%`} />
         <StatCard icon={<Users className="size-4 text-gold" />} label="Followers / Subscribers" value={`${followerCount} / ${subscriberCount}`} />
@@ -82,20 +89,22 @@ export default async function StudioPage() {
               </Card>
             )}
             {picks.map((p) => (
-              <Card key={p.id}>
-                <CardContent className="flex items-center justify-between gap-3 p-4">
-                  <div className="flex items-center gap-3">
-                    <SportBadge sport={p.sport} />
-                    <div>
-                      <div className="text-sm font-medium">{p.selection}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {p.game.awayTeam} @ {p.game.homeTeam} · {timeAgo(p.publishedAt)}
+              <Link key={p.id} href={`/picks/${p.id}`}>
+                <Card className="transition-colors hover:border-gold/40">
+                  <CardContent className="flex items-center justify-between gap-3 p-4">
+                    <div className="flex items-center gap-3">
+                      <SportBadge sport={p.sport} />
+                      <div>
+                        <div className="text-sm font-medium">{p.selection}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {p.game.awayTeam} @ {p.game.homeTeam} · {timeAgo(p.publishedAt)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <StatusBadge status={p.status} />
-                </CardContent>
-              </Card>
+                    <StatusBadge status={p.status} />
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>

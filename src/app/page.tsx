@@ -34,6 +34,7 @@ export default async function Home() {
     winCount: h.winCount,
     lossCount: h.lossCount,
     roiPercent: h.roiPercent,
+    unitsNet: h.unitsNet,
     ratingAvg: h.ratingAvg,
     ratingCount: h.ratingCount,
     followerCount: h.followers.length,
@@ -170,9 +171,9 @@ export default async function Home() {
       {/* Sports coverage strip */}
       <section className="border-t border-border/70 py-10">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-4 sm:px-6 lg:px-8">
-          {Object.values(SPORT_LABELS).map((label) => (
-            <span key={label} className="text-sm font-medium tracking-wide text-muted-foreground/70">
-              {label}
+          {sportsTracked.map(({ sport }) => (
+            <span key={sport} className="text-sm font-medium tracking-wide text-muted-foreground/70">
+              {SPORT_LABELS[sport] ?? sport}
             </span>
           ))}
         </div>

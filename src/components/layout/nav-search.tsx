@@ -8,7 +8,7 @@ export function NavSearch() {
 
   return (
     <form
-      className="relative hidden lg:block"
+      className="relative hidden 2xl:block"
       onSubmit={(e) => {
         e.preventDefault();
         const q = new FormData(e.currentTarget).get("q");
@@ -21,7 +21,7 @@ export function NavSearch() {
       <input
         name="q"
         placeholder="Search picks, handicappers, teams…"
-        className="h-9 w-64 rounded-full border border-border bg-surface-2 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus:border-gold focus:ring-1 focus:ring-gold"
+        className="h-9 w-56 rounded-full border border-border bg-surface-2 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus:border-gold focus:ring-1 focus:ring-gold"
       />
     </form>
   );

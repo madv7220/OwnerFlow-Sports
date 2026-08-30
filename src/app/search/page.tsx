@@ -62,6 +62,7 @@ export default async function SearchPage({
     winCount: h.winCount,
     lossCount: h.lossCount,
     roiPercent: h.roiPercent,
+    unitsNet: h.unitsNet,
     ratingAvg: h.ratingAvg,
     ratingCount: h.ratingCount,
     followerCount: h.followers.length,
@@ -98,7 +99,7 @@ export default async function SearchPage({
           <h2 className="font-display text-xl mb-4">Picks</h2>
           <div className="flex flex-col gap-3">
             {picks.map((p) => (
-              <Link key={p.id} href={`/picks?type=picks`}>
+              <Link key={p.id} href={`/picks/${p.id}`}>
                 <Card className="transition-colors hover:border-gold/40">
                   <CardContent className="flex items-center justify-between gap-4 p-4">
                     <div className="flex items-center gap-3">
