@@ -23,13 +23,15 @@ export default async function SearchPage({
     );
   }
 
+  // Postgres LIKE is case-sensitive, so every user-typed match needs
+  // `mode: "insensitive"` — without it, searching "chiefs" misses "Chiefs".
   const [handicappers, picks] = await Promise.all([
     prisma.handicapperProfile.findMany({
       where: {
         OR: [
-          { displayName: { contains: query } },
-          { tagline: { contains: query } },
-          { user: { username: { contains: query } } },
+          { displayName: { contains: query, mode: "insensitive" } },
+          { tagline: { contains: query, mode: "insensitive" } },
+          { user: { username: { contains: query, mode: "insensitive" } } },
         ],
       },
       include: {
@@ -42,9 +44,9 @@ export default async function SearchPage({
     prisma.pick.findMany({
       where: {
         OR: [
-          { selection: { contains: query } },
-          { game: { homeTeam: { contains: query } } },
-          { game: { awayTeam: { contains: query } } },
+          { selection: { contains: query, mode: "insensitive" } },
+          { game: { homeTeam: { contains: query, mode: "insensitive" } } },
+          { game: { awayTeam: { contains: query, mode: "insensitive" } } },
         ],
       },
       include: { game: true, handicapper: { select: { displayName: true, user: { select: { username: true } } } } },
