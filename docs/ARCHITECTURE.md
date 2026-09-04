@@ -2,7 +2,7 @@
 
 This document describes what is built in this repository today: the data model,
 the grading engine, the Stripe / odds-feed / LiveKit integrations, and what
-remains to run it at scale past a single SQLite file.
+remains to run it at scale.
 
 ## 1. What's implemented right now
 
@@ -15,8 +15,7 @@ UI states, no placeholder buttons. Specifically:
 - **Data model**: Prisma schema (`prisma/schema.prisma`) covering users,
   handicapper profiles, membership tiers, subscriptions, games, picks, parlays
   (with legs), purchases, follows, live feed posts/likes/comments, live
-  streams/chat, and a wallet ledger. SQLite in dev, swaps to Postgres by
-  changing one datasource line (see §3).
+  streams/chat, and a wallet ledger. PostgreSQL everywhere (see §3).
 - **Grading engine** (`src/lib/grading.ts`): settles picks and parlays against
   final scores and derives every handicapper's public record from that graded
   history. Exposed as `POST /api/admin/grade` for an admin or a cron job.
@@ -47,33 +46,40 @@ UI states, no placeholder buttons. Specifically:
 |---|---|---|
 | Framework | Next.js 16 (App Router, Turbopack, React 19) | Server components keep data-fetching close to the DB; API routes double as the backend. |
 | Styling | Tailwind CSS v4 + hand-rolled Radix primitives | Full control over the luxury visual language without shipping a generic component-library look. |
-| ORM | Prisma 6 | Type-safe schema, migrations, works identically against SQLite (dev) and Postgres (prod). |
+| ORM | Prisma 6 | Type-safe schema and migrations; one PostgreSQL datasource across every environment. |
 | Auth | NextAuth v5 (Credentials + JWT) | Drop-in room to add OAuth providers later without touching the data model. |
 | Validation | Zod | Every API route validates its body before touching the DB. |
 
-## 3. Moving from SQLite to Postgres
+## 3. Database
 
-1. Provision a Postgres instance (Neon, RDS, Supabase, or Vercel Postgres).
-2. In `prisma/schema.prisma`, change:
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-3. Set `DATABASE_URL` to the Postgres connection string.
-4. `npx prisma migrate deploy` to apply the existing migration history.
-5. Two SQLite-specific things to double check after the switch: `String`
-   columns used for pipe/comma-separated lists (`HandicapperProfile.specialties`,
-   `MembershipTier.perks`) should become Postgres native arrays
-   (`String[]`) — trivial migration, cosmetic only, everything still works if
-   left as-is. Case-insensitive search in `/search` currently relies on
-   SQLite's default case-insensitive `LIKE`; on Postgres add
-   `mode: "insensitive"` to the `contains` filters in
-   `src/app/search/page.tsx`.
-6. Add PgBouncer (or your host's pooler) in front of Postgres once you're
-   running serverless functions — Prisma's connection count adds up fast
-   under concurrent invocations.
+PostgreSQL in every environment — local, preview, and production — so a query
+that works on your machine behaves the same in production. (An earlier revision
+used SQLite locally; that split is exactly how case-sensitivity bugs reach
+production, since SQLite's `LIKE` is case-insensitive and Postgres's is not.)
+
+Two connection strings:
+
+| Variable | Used by | Notes |
+|---|---|---|
+| `DATABASE_URL` | the running app | Use the **pooled** string on serverless hosts. Each request may open its own connection, and an unpooled database runs out of them fast. |
+| `DIRECT_URL` | `prisma migrate` only | Migrations need one long-lived session and cannot run through a pooler. On Neon this is the same string without `-pooler` in the host. |
+
+On a plain Postgres server, set both to the same value.
+
+Setup is `npx prisma migrate deploy` followed by `npm run db:seed`. The
+migration history is a single `20260904000000_init` migration containing real
+Postgres types — `CREATE TYPE ... AS ENUM` for every enum, which SQLite could
+only approximate as free-text columns.
+
+Two notes for later scaling:
+
+1. `HandicapperProfile.specialties` and `MembershipTier.perks` are delimited
+   strings rather than Postgres native arrays (`String[]`). This works
+   correctly as-is; converting them is a cosmetic migration whenever you want
+   cleaner queries.
+2. Add PgBouncer, or your host's pooler, in front of Postgres once traffic
+   grows. Neon and Supabase provide one; the `DATABASE_URL` / `DIRECT_URL`
+   split above is already set up for it.
 
 ## 4. Third-party integrations
 
@@ -212,6 +218,35 @@ flowchart LR
 - **Object storage**: handicapper avatars, hero images, and feed post images
   aren't in the current build (deliberately — see design notes below). Add
   S3/R2 + `next/image` remote patterns when real image upload lands.
+
+### 5.1 Shipping it to Vercel
+
+The repository deploys as-is; there is no build configuration to write.
+
+1. **Database.** Create a Neon project. Copy both connection strings — the
+   pooled one (host contains `-pooler`) and the direct one.
+2. **Import the repo** at vercel.com → Add New → Project.
+3. **Environment variables**, before the first deploy:
+   - `DATABASE_URL` — the **pooled** string
+   - `DIRECT_URL` — the **direct** string
+   - `AUTH_SECRET` — a fresh `openssl rand -base64 32`, not the local one
+   - `NEXTAUTH_URL` / `NEXT_PUBLIC_APP_URL` — the deployed origin
+   - whichever of the Stripe / Odds / LiveKit keys you're enabling
+4. **Create the tables.** Point a local shell at the production `DIRECT_URL`
+   and run `npx prisma migrate deploy`. Run `npm run db:seed` only if you want
+   the demo roster in production — on a real launch you almost certainly don't.
+5. **Stripe webhook.** Add an endpoint for
+   `https://<your-domain>/api/stripe/webhook` in the Stripe dashboard,
+   subscribed to the five events in §4.1. It issues a *new* signing secret —
+   that is the value for `STRIPE_WEBHOOK_SECRET` in Vercel, not the local
+   `stripe listen` one.
+6. **Schedule the sync.** Add a Vercel Cron Job hitting
+   `/api/admin/sync-odds` every few minutes on game days, with the
+   `x-cron-secret` header set to `GRADING_CRON_SECRET`.
+
+A preview deployment per pull request comes free, but each one shares whatever
+`DATABASE_URL` you configure — point previews at a separate Neon branch if you
+don't want them writing to production data.
 
 ## 6. Security checklist for launch
 

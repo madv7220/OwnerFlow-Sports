@@ -1,15 +1,20 @@
 // OwnerFlow Sports — data model
-// Dev datasource: SQLite (file:./dev.db). Swap the `provider`/`url` in
-// prisma.config.ts + this file to "postgresql" for production — see
-// docs/ARCHITECTURE.md for the migration path.
+//
+// PostgreSQL in every environment, so local behaviour matches production.
+// DATABASE_URL is the connection the app runs on: use your provider's *pooled*
+// string on serverless hosts, where each request can open its own connection.
+// DIRECT_URL is the unpooled string used only for migrations, which need a
+// single long-lived session. With a plain Postgres server both are the same
+// value and DIRECT_URL can be omitted.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------

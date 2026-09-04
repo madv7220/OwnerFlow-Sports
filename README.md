@@ -9,19 +9,28 @@ odds data, live video).
 
 ## Stack
 
-Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Prisma · SQLite (dev)
+Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Prisma · PostgreSQL
 · NextAuth v5
 
 ## Getting started
 
+You need a PostgreSQL database. The fastest free option is
+[Neon](https://neon.tech) — create a project and copy the connection string;
+no install required.
+
 ```bash
+cp .env.example .env        # then paste your database URL into it
 npm install
-npx prisma migrate deploy   # create the local SQLite database
+npx prisma migrate deploy   # create the tables
 npm run db:seed             # seed handicappers, games, picks, parlays, feed
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+Set `DATABASE_URL` and `DIRECT_URL` in `.env` before the migrate step. On Neon
+they differ only by the `-pooler` suffix in the host; on a plain Postgres
+server both are the same value.
 
 ### Demo accounts
 
@@ -117,7 +126,7 @@ In production this runs on a schedule right after the odds/scores sync — see
 | `npm run dev` | Start the dev server. |
 | `npm run build` | Production build. |
 | `npm run db:seed` | Re-seed the database (`prisma/seed.ts`). |
-| `npm run db:reset` | Drop and recreate the local database, then re-seed. |
+| `npm run db:reset` | Drop and recreate the database, then re-seed. **Never run against production.** |
 | `npm run check:integrations` | Verify Stripe / Odds API / LiveKit credentials actually work. |
 
 ## Project structure
